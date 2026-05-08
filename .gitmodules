@@ -1,0 +1,6 @@
+[submodule "gateway-startup"]
+	path = gateway-startup
+	url = https://github.com/Weit145/gateway-startup
+[submodule "auth-startup"]
+	path = auth-startup
+	url = https://github.com/Weit145/auth-startup
