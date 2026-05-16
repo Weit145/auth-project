@@ -5,7 +5,7 @@ services:
       dockerfile: Dockerfile
     restart: unless-stopped
     environment:
-      LOG_LEVEL: INFO
+      LOG_LEVEL: DEBUG
       HTTP_ADDRESS: 0.0.0.0:8080
       AUTH_GRPC_ADDR: auth:50051
     ports:
@@ -20,7 +20,7 @@ services:
       dockerfile: Dockerfile
     restart: unless-stopped
     environment:
-      LOG_LEVEL: INFO
+      LOG_LEVEL: DEBUG
       GRPC_AUTH_ADDR: 0.0.0.0:50051
       DATABASE_URL: postgres://postgres:postgres@db:5432/postgres?sslmode=disable
     ports:
