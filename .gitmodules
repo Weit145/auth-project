@@ -4,3 +4,6 @@
 [submodule "auth-startup"]
 	path = auth-startup
 	url = https://github.com/Weit145/auth-startup
+[submodule "notification-startup"]
+	path = notification-startup
+	url = https://github.com/Weit145/notification-startup

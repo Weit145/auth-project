@@ -23,10 +23,14 @@ services:
       LOG_LEVEL: DEBUG
       GRPC_AUTH_ADDR: 0.0.0.0:50051
       DATABASE_URL: postgres://postgres:postgres@db:5432/postgres?sslmode=disable
+      KAFKA_BROKERS: kafka:9092
+      KAFKA_NOTIFICATIONS_TOPIC: notifications
     ports:
       - "50051:50051"
     depends_on:
       db:
+        condition: service_healthy
+      kafka:
         condition: service_healthy
     healthcheck:
       test: ["CMD-SHELL", "pidof auth-startup >/dev/null"]
@@ -34,6 +38,92 @@ services:
       timeout: 5s
       retries: 5
       start_period: 5s
+
+  notification:
+    build:
+      context: ./notification-startup
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    env_file:
+      - ./notification-startup/.env
+    environment:
+      LOG_LEVEL: DEBUG
+      CELERY_BROKER: amqp://guest:guest@rabbitmq:5672//
+      KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+      KAFKA_AUTO_OFFSET_RESET: earliest
+      KAFKA_REGISTRATION_TOPIC: notifications
+      KAFKA_REGISTRATION_DLQ_TOPIC: notifications.dlq
+      KAFKA_CONSUMER_GROUP_ID: notification.email_verification
+    depends_on:
+      kafka:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+
+  notification-worker:
+    build:
+      context: ./notification-startup
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    command: ["celery", "-A", "app.infrastructure.tasks.celery:app", "worker", "--loglevel=INFO"]
+    env_file:
+      - ./notification-startup/.env
+    environment:
+      LOG_LEVEL: DEBUG
+      CELERY_BROKER: amqp://guest:guest@rabbitmq:5672//
+      KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+      KAFKA_AUTO_OFFSET_RESET: earliest
+      KAFKA_REGISTRATION_TOPIC: notifications
+      KAFKA_REGISTRATION_DLQ_TOPIC: notifications.dlq
+      KAFKA_CONSUMER_GROUP_ID: notification.email_verification
+      EMAIL_IDEMPOTENCY_DB_PATH: /tmp/notification-email-idempotency.sqlite3
+    volumes:
+      - notification_idempotency:/tmp
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+
+  kafka:
+    image: apache/kafka:3.7.2
+    hostname: kafka
+    restart: unless-stopped
+    environment:
+      KAFKA_NODE_ID: 1
+      KAFKA_PROCESS_ROLES: broker,controller
+      KAFKA_CONTROLLER_QUORUM_VOTERS: 1@kafka:9093
+      KAFKA_LISTENERS: CONTROLLER://:9093,PLAINTEXT://:9092,PLAINTEXT_HOST://:9094
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092,PLAINTEXT_HOST://localhost:9094
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT
+      KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
+      KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
+      CLUSTER_ID: 4L6g3nShT-eMCtK--X86sw
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: 0
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
+      KAFKA_LOG_DIRS: /var/lib/kafka/data
+    ports:
+      - "9094:9094"
+    volumes:
+      - kafka_data:/var/lib/kafka/data
+    healthcheck:
+      test: ["CMD-SHELL", "/opt/kafka/bin/kafka-topics.sh --bootstrap-server localhost:9092 --list >/dev/null 2>&1"]
+      interval: 10s
+      timeout: 10s
+      retries: 10
+      start_period: 20s
+
+  rabbitmq:
+    image: rabbitmq:3.13-alpine
+    restart: unless-stopped
+    volumes:
+      - rabbitmq_data:/var/lib/rabbitmq
+    healthcheck:
+      test: ["CMD-SHELL", "rabbitmq-diagnostics -q ping"]
+      interval: 10s
+      timeout: 10s
+      retries: 10
+      start_period: 10s
 
   db:
     image: postgres:16-alpine
@@ -56,3 +146,6 @@ services:
 
 volumes:
   db_data:
+  kafka_data:
+  rabbitmq_data:
+  notification_idempotency:
