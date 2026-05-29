@@ -47,8 +47,12 @@ services:
     env_file:
       - ./notification-startup/.env
     environment:
-      LOG_LEVEL: DEBUG
+      LOG_LEVEL: INFO
       CELERY_BROKER: amqp://guest:guest@rabbitmq:5672//
+      SMTP_HOST: smtp.gmail.com
+      SMTP_PORT: 465
+      SMTP_USE_TLS: true
+      SMTP_TIMEOUT: 30
       KAFKA_BOOTSTRAP_SERVERS: kafka:9092
       KAFKA_AUTO_OFFSET_RESET: earliest
       KAFKA_REGISTRATION_TOPIC: notifications
@@ -65,12 +69,16 @@ services:
       context: ./notification-startup
       dockerfile: Dockerfile
     restart: unless-stopped
-    command: ["celery", "-A", "app.infrastructure.tasks.celery:app", "worker", "--loglevel=INFO"]
+    command: ["celery", "--quiet", "-A", "app.infrastructure.tasks.celery:app", "worker", "--loglevel=WARNING"]
     env_file:
       - ./notification-startup/.env
     environment:
-      LOG_LEVEL: DEBUG
+      LOG_LEVEL: INFO
       CELERY_BROKER: amqp://guest:guest@rabbitmq:5672//
+      SMTP_HOST: smtp.gmail.com
+      SMTP_PORT: 465
+      SMTP_USE_TLS: true
+      SMTP_TIMEOUT: 30
       KAFKA_BOOTSTRAP_SERVERS: kafka:9092
       KAFKA_AUTO_OFFSET_RESET: earliest
       KAFKA_REGISTRATION_TOPIC: notifications

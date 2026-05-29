@@ -1,5 +1,5 @@
 up:
-	docker compose up
+	docker compose up --no-build --no-attach kafka
 
 build:
 	docker compose up --build
