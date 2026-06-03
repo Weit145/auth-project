@@ -21,6 +21,9 @@ coverage.out
 # Docker local overrides
 docker-compose.override.yml
 
+# Local development secrets
+secrets/*.pem
+
 # IDE and OS files
 .idea/
 .vscode/
