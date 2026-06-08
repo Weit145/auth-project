@@ -1,0 +1,214 @@
+<!doctype html>
+<html lang="ru">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="theme-color" content="#101715">
+    <title>KLoad · API Testing Console</title>
+    <link rel="stylesheet" href="/styles.css">
+    <script src="/app.js" defer></script>
+</head>
+<body>
+    <div class="ambient ambient-one"></div>
+    <div class="ambient ambient-two"></div>
+
+    <header class="topbar">
+        <a class="brand" href="/" aria-label="KLoad">
+            <span class="brand-mark">K</span>
+            <span>
+                <strong>KLoad</strong>
+                <small>API testing console</small>
+            </span>
+        </a>
+        <div class="topbar-actions">
+            <span class="environment"><i></i> local environment</span>
+            <a class="button ghost compact" href="/swagger/index.html" target="_blank" rel="noopener">Swagger</a>
+            <button class="button secondary compact" id="health-refresh" type="button">Проверить сервисы</button>
+        </div>
+    </header>
+
+    <main class="shell">
+        <section class="hero">
+            <div class="hero-copy">
+                <span class="eyebrow">AUTH WORKSPACE / 01</span>
+                <h1>Проверяйте весь auth-flow<br><em>в одном окне.</em></h1>
+                <p>Регистрация, подтверждение email, сессия и ответы API без ручной сборки запросов.</p>
+            </div>
+            <div class="health-panel">
+                <div class="section-heading">
+                    <div>
+                        <span class="eyebrow">LIVE STATUS</span>
+                        <h2>Состояние системы</h2>
+                    </div>
+                    <span class="last-check" id="health-time">ещё не проверено</span>
+                </div>
+                <div class="health-grid" id="health-grid">
+                    <div class="health-card loading"><span>gateway</span><strong>проверка...</strong></div>
+                    <div class="health-card loading"><span>auth + db</span><strong>проверка...</strong></div>
+                </div>
+            </div>
+        </section>
+
+        <nav class="tabs" aria-label="Разделы">
+            <button class="tab active" type="button" data-tab="flow">Auth flow <span>5 шагов</span></button>
+            <button class="tab" type="button" data-tab="console">API console <span>ручной запрос</span></button>
+            <button class="tab" type="button" data-tab="requests">История <span id="request-count">0</span></button>
+        </nav>
+
+        <section class="tab-page active" id="tab-flow">
+            <div class="flow-layout">
+                <div class="steps">
+                    <article class="card step-card">
+                        <div class="step-head">
+                            <span class="step-number">01</span>
+                            <div><h2>Создать аккаунт</h2><p>Отправляет событие подтверждения в Kafka.</p></div>
+                            <span class="method post">POST</span>
+                        </div>
+                        <form id="register-form">
+                            <div class="form-grid">
+                                <label><span>Имя</span><input name="name" value="Test User" minlength="4" maxlength="32" required></label>
+                                <label><span>Email</span><input name="email" id="register-email" type="email" maxlength="32" required></label>
+                            </div>
+                            <label><span>Пароль</span><input name="password" id="register-password" type="password" value="Test12345" minlength="6" maxlength="32" required></label>
+                            <div class="form-actions">
+                                <button class="button primary" type="submit">Зарегистрировать</button>
+                                <button class="button ghost" id="generate-user" type="button">Новые тестовые данные</button>
+                                <code>/auth/register</code>
+                            </div>
+                        </form>
+                    </article>
+
+                    <article class="card step-card" id="confirm-card">
+                        <div class="step-head">
+                            <span class="step-number">02</span>
+                            <div><h2>Подтвердить email</h2><p>Вставьте ссылку из письма или заполните поля.</p></div>
+                            <span class="method post">POST</span>
+                        </div>
+                        <label><span>Ссылка из письма</span><input id="confirmation-url" placeholder="http://localhost:3000/?token=...&userId=..."></label>
+                        <button class="text-button" id="parse-confirmation" type="button">Разобрать ссылку и заполнить форму</button>
+                        <form id="confirm-form">
+                            <div class="form-grid">
+                                <label><span>User ID</span><input name="userId" id="confirm-user-id" placeholder="UUID" required></label>
+                                <label><span>Verification token</span><input name="token" id="confirm-token" placeholder="Токен из ссылки" required></label>
+                            </div>
+                            <div class="form-actions">
+                                <button class="button primary" type="submit">Подтвердить email</button>
+                                <code>/auth/confirm-email</code>
+                            </div>
+                        </form>
+                    </article>
+
+                    <article class="card step-card">
+                        <div class="step-head">
+                            <span class="step-number">03</span>
+                            <div><h2>Войти</h2><p>Получает access token и HttpOnly refresh cookie.</p></div>
+                            <span class="method post">POST</span>
+                        </div>
+                        <form id="login-form">
+                            <div class="form-grid">
+                                <label><span>Email</span><input name="email" id="login-email" type="email" required></label>
+                                <label><span>Пароль</span><input name="password" id="login-password" type="password" value="Test12345" required></label>
+                            </div>
+                            <div class="form-actions">
+                                <button class="button primary" type="submit">Войти</button>
+                                <code>/auth/login</code>
+                            </div>
+                        </form>
+                    </article>
+                </div>
+
+                <aside class="session-column">
+                    <article class="card session-card">
+                        <div class="section-heading">
+                            <div><span class="eyebrow">CURRENT SESSION</span><h2>Активная сессия</h2></div>
+                            <span class="session-dot" id="session-dot"></span>
+                        </div>
+                        <div class="empty-session" id="empty-session">
+                            <div class="empty-icon">↗</div>
+                            <strong>Сессия не создана</strong>
+                            <p>Подтвердите email или выполните вход.</p>
+                        </div>
+                        <div class="session-data hidden" id="session-data">
+                            <div class="user-row">
+                                <span class="avatar" id="user-avatar">TU</span>
+                                <div><strong id="user-name">Test User</strong><span id="user-email">test@example.com</span></div>
+                                <b id="user-role">user</b>
+                            </div>
+                            <dl class="session-meta">
+                                <div><dt>User ID</dt><dd id="user-id">—</dd></div>
+                                <div><dt>Token expires</dt><dd id="token-expiry">—</dd></div>
+                            </dl>
+                            <label><span>Access token</span><textarea id="access-token" rows="5" readonly></textarea></label>
+                            <div class="session-actions">
+                                <button class="button secondary" id="copy-token" type="button">Копировать token</button>
+                                <button class="button ghost" id="clear-session" type="button">Очистить локально</button>
+                            </div>
+                        </div>
+                    </article>
+
+                    <article class="card action-card">
+                        <div class="step-head small">
+                            <span class="step-number">04</span>
+                            <div><h2>Обновить token</h2><p>Использует HttpOnly cookie.</p></div>
+                        </div>
+                        <button class="button wide secondary" id="refresh-token" type="button">Refresh access token</button>
+                    </article>
+
+                    <article class="card action-card">
+                        <div class="step-head small">
+                            <span class="step-number">05</span>
+                            <div><h2>Завершить сессию</h2><p>Отзывает refresh-сессию.</p></div>
+                        </div>
+                        <button class="button wide danger" id="logout" type="button">Logout</button>
+                    </article>
+
+                    <article class="card jwt-card hidden" id="jwt-card">
+                        <div class="section-heading"><div><span class="eyebrow">DECODED JWT</span><h2>Payload</h2></div></div>
+                        <pre id="jwt-payload"></pre>
+                    </article>
+                </aside>
+            </div>
+        </section>
+
+        <section class="tab-page" id="tab-console">
+            <div class="console-layout">
+                <article class="card console-card">
+                    <div class="section-heading">
+                        <div><span class="eyebrow">REQUEST BUILDER</span><h2>Ручной HTTP-запрос</h2></div>
+                    </div>
+                    <form id="console-form">
+                        <div class="request-line">
+                            <select id="console-method" aria-label="HTTP method">
+                                <option>GET</option><option selected>POST</option><option>PUT</option><option>PATCH</option><option>DELETE</option>
+                            </select>
+                            <input id="console-path" value="/auth/login" aria-label="Endpoint path">
+                            <button class="button primary" type="submit">Отправить</button>
+                        </div>
+                        <label class="checkbox"><input id="console-auth" type="checkbox"><span>Добавить Bearer access token</span></label>
+                        <label><span>JSON body</span><textarea class="code-area" id="console-body" rows="14">{
+  "email": "",
+  "password": "Test12345"
+}</textarea></label>
+                    </form>
+                </article>
+                <article class="card endpoints-card">
+                    <div class="section-heading"><div><span class="eyebrow">AVAILABLE ROUTES</span><h2>Gateway endpoints</h2></div></div>
+                    <div id="endpoint-list"></div>
+                </article>
+            </div>
+        </section>
+
+        <section class="tab-page" id="tab-requests">
+            <article class="card history-card">
+                <div class="section-heading">
+                    <div><span class="eyebrow">REQUEST LOG</span><h2>История запросов</h2></div>
+                    <button class="button ghost compact" id="clear-history" type="button">Очистить</button>
+                </div>
+                <div class="history-list" id="history-list"></div>
+            </article>
+        </section>
+    </main>
+
+    <div class="toast-region" id="toast-region" aria-live="polite"></div>
+</body>
+</html>
