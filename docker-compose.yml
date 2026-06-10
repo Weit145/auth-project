@@ -38,6 +38,7 @@ services:
       GRPC_AUTH_ADDR: 0.0.0.0:50051
       DATABASE_URL: postgres://postgres:postgres@db:5432/postgres?sslmode=disable
       JWT_PRIVATE_KEY_PATH: /run/secrets/jwt_private.pem
+      JWT_REFRESH_SECRET: ${JWT_REFRESH_SECRET:-}
       KAFKA_BROKERS: kafka:9092
       KAFKA_NOTIFICATIONS_TOPIC: notifications
       EMAIL_VERIFICATION_URL: http://localhost:3000/
