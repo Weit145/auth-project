@@ -15,15 +15,23 @@ services:
       context: ./gateway-startup
       dockerfile: Dockerfile
     restart: unless-stopped
+    user: "${APP_UID:-1000}:${APP_GID:-1000}"
     environment:
       LOG_LEVEL: DEBUG
       HTTP_ADDRESS: 0.0.0.0:8080
       AUTH_GRPC_ADDR: auth:50051
+      AUTH_GRPC_TLS_CERT_PATH: /run/secrets/client.crt
+      AUTH_GRPC_TLS_KEY_PATH: /run/secrets/client.key
+      AUTH_GRPC_TLS_CA_PATH: /run/secrets/ca.crt
+      AUTH_GRPC_TLS_SERVER_NAME: auth
       JWT_PUBLIC_KEY_PATH: /run/secrets/jwt_public.pem
     ports:
       - "8080:8080"
     volumes:
       - ./secrets/jwt_public.pem:/run/secrets/jwt_public.pem:ro
+      - ./secrets/client.crt:/run/secrets/client.crt:ro
+      - ./secrets/client.key:/run/secrets/client.key:ro
+      - ./secrets/ca.crt:/run/secrets/ca.crt:ro
     depends_on:
       auth:
         condition: service_healthy
@@ -33,19 +41,26 @@ services:
       context: ./auth-startup
       dockerfile: Dockerfile
     restart: unless-stopped
+    user: "${APP_UID:-1000}:${APP_GID:-1000}"
     environment:
       LOG_LEVEL: DEBUG
       GRPC_AUTH_ADDR: 0.0.0.0:50051
+      GRPC_TLS_CERT_PATH: /run/secrets/server.crt
+      GRPC_TLS_KEY_PATH: /run/secrets/server.key
+      GRPC_TLS_CLIENT_CA_PATH: /run/secrets/ca.crt
       DATABASE_URL: postgres://postgres:postgres@db:5432/postgres?sslmode=disable
       JWT_PRIVATE_KEY_PATH: /run/secrets/jwt_private.pem
       JWT_REFRESH_SECRET: ${JWT_REFRESH_SECRET:-}
       KAFKA_BROKERS: kafka:9092
       KAFKA_NOTIFICATIONS_TOPIC: notifications
       EMAIL_VERIFICATION_URL: http://localhost:3000/
-    ports:
-      - "50051:50051"
+    # ports:
+    #   - "50051:50051"
     volumes:
       - ./secrets/jwt_private.pem:/run/secrets/jwt_private.pem:ro
+      - ./secrets/server.crt:/run/secrets/server.crt:ro
+      - ./secrets/server.key:/run/secrets/server.key:ro
+      - ./secrets/ca.crt:/run/secrets/ca.crt:ro
     depends_on:
       db:
         condition: service_healthy

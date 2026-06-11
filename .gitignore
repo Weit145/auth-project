@@ -23,6 +23,8 @@ docker-compose.override.yml
 
 # Local development secrets
 secrets/*.pem
+secrets/*.crt
+secrets/*.key
 
 # IDE and OS files
 .idea/
