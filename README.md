@@ -6,6 +6,11 @@
 make build
 ```
 
+Команда создаёт локальные `.env`-файлы, записывает текущие `APP_UID/APP_GID`
+и генерирует случайный `JWT_REFRESH_SECRET`, mTLS-сертификаты и JWT-ключи
+через OpenSSL. Для production используйте сертификаты и секреты из
+защищённого хранилища вместо локально сгенерированных файлов.
+
 После запуска доступны:
 
 - API testing console: http://localhost:3000
@@ -22,6 +27,7 @@ user ID. Для другого адреса задайте `EMAIL_VERIFICATION_U
 
 ```bash
 make up
+make prepare
 make logs_all
 make down
 make delete

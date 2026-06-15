@@ -25,6 +25,7 @@ services:
       AUTH_GRPC_TLS_CA_PATH: /run/secrets/ca.crt
       AUTH_GRPC_TLS_SERVER_NAME: auth
       JWT_PUBLIC_KEY_PATH: /run/secrets/jwt_public.pem
+      REDIS_ADDR: redis:6379
     ports:
       - "8080:8080"
     volumes:
@@ -34,6 +35,8 @@ services:
       - ./secrets/ca.crt:/run/secrets/ca.crt:ro
     depends_on:
       auth:
+        condition: service_healthy
+      redis:
         condition: service_healthy
 
   auth:
@@ -50,7 +53,7 @@ services:
       GRPC_TLS_CLIENT_CA_PATH: /run/secrets/ca.crt
       DATABASE_URL: postgres://postgres:postgres@db:5432/postgres?sslmode=disable
       JWT_PRIVATE_KEY_PATH: /run/secrets/jwt_private.pem
-      JWT_REFRESH_SECRET: ${JWT_REFRESH_SECRET:-}
+      JWT_REFRESH_SECRET: ${JWT_REFRESH_SECRET:?JWT_REFRESH_SECRET must be set in .env}
       KAFKA_BROKERS: kafka:9092
       KAFKA_NOTIFICATIONS_TOPIC: notifications
       EMAIL_VERIFICATION_URL: http://localhost:3000/
@@ -167,6 +170,18 @@ services:
       retries: 10
       start_period: 10s
 
+  redis:
+    image: redis:8-alpine
+    restart: unless-stopped
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+      start_period: 5s
+
   db:
     image: postgres:16-alpine
     restart: unless-stopped
@@ -190,4 +205,5 @@ volumes:
   db_data:
   kafka_data:
   rabbitmq_data:
+  redis_data:
   notification_idempotency:
