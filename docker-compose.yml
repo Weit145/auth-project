@@ -192,6 +192,7 @@ services:
     volumes:
       - db_data:/var/lib/postgresql/data
       - ./auth-startup/migrations/00001_init.up.sql:/docker-entrypoint-initdb.d/00001_init.sql:ro
+      - ./auth-startup/migrations/00002_password_reset_tokens.up.sql:/docker-entrypoint-initdb.d/00002_password_reset_tokens.sql:ro
     ports:
       - "5432:5432"
     healthcheck:

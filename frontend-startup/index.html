@@ -50,7 +50,7 @@
         </section>
 
         <nav class="tabs" aria-label="Разделы">
-            <button class="tab active" type="button" data-tab="flow">Auth flow <span>5 шагов</span></button>
+            <button class="tab active" type="button" data-tab="flow">Auth flow <span>9 ручек</span></button>
             <button class="tab" type="button" data-tab="console">API console <span>ручной запрос</span></button>
             <button class="tab" type="button" data-tab="requests">История <span id="request-count">0</span></button>
         </nav>
@@ -74,6 +74,13 @@
                                 <button class="button primary" type="submit">Зарегистрировать</button>
                                 <button class="button ghost" id="generate-user" type="button">Новые тестовые данные</button>
                                 <code>/auth/register</code>
+                            </div>
+                        </form>
+                        <form id="repeat-email-form" class="inline-form">
+                            <label><span>Email для повторного письма</span><input name="email" id="repeat-email" type="email" maxlength="32" required></label>
+                            <div class="form-actions">
+                                <button class="button secondary" type="submit">Повторить письмо</button>
+                                <code>/auth/repeat-email</code>
                             </div>
                         </form>
                     </article>
@@ -115,6 +122,35 @@
                             </div>
                         </form>
                     </article>
+
+                    <article class="card step-card" id="password-reset-card">
+                        <div class="step-head">
+                            <span class="step-number">04</span>
+                            <div><h2>Восстановить пароль</h2><p>Запрашивает reset token и подтверждает новый пароль.</p></div>
+                            <span class="method post">POST</span>
+                        </div>
+                        <form id="password-request-form">
+                            <label><span>Email</span><input name="email" id="password-request-email" type="email" maxlength="32" required></label>
+                            <div class="form-actions">
+                                <button class="button secondary" type="submit">Запросить reset token</button>
+                                <code>/auth/password-reset/request</code>
+                            </div>
+                        </form>
+                        <div class="form-divider"></div>
+                        <label><span>Ссылка из письма</span><input id="password-reset-url" placeholder="http://localhost:3000/?token=...&userId=..."></label>
+                        <button class="text-button" id="parse-password-reset" type="button">Разобрать reset-ссылку</button>
+                        <form id="password-confirm-form">
+                            <div class="form-grid">
+                                <label><span>User ID</span><input name="userId" id="password-confirm-user-id" placeholder="UUID" required></label>
+                                <label><span>Reset token</span><input name="token" id="password-confirm-token" placeholder="Токен из ссылки" required></label>
+                            </div>
+                            <label><span>Новый пароль</span><input name="password" id="password-confirm-password" type="password" value="Changed12345" minlength="6" maxlength="32" required></label>
+                            <div class="form-actions">
+                                <button class="button primary" type="submit">Сменить через reset</button>
+                                <code>/auth/password-reset/confirm</code>
+                            </div>
+                        </form>
+                    </article>
                 </div>
 
                 <aside class="session-column">
@@ -148,7 +184,7 @@
 
                     <article class="card action-card">
                         <div class="step-head small">
-                            <span class="step-number">04</span>
+                            <span class="step-number">05</span>
                             <div><h2>Обновить token</h2><p>Использует HttpOnly cookie.</p></div>
                         </div>
                         <button class="button wide secondary" id="refresh-token" type="button">Refresh access token</button>
@@ -156,7 +192,19 @@
 
                     <article class="card action-card">
                         <div class="step-head small">
-                            <span class="step-number">05</span>
+                            <span class="step-number">06</span>
+                            <div><h2>Сменить пароль</h2><p>Требует Bearer access token.</p></div>
+                        </div>
+                        <form id="change-password-form">
+                            <label><span>Старый пароль</span><input name="old_password" id="old-password" type="password" value="Test12345" minlength="6" maxlength="32" required></label>
+                            <label><span>Новый пароль</span><input name="new_password" id="new-password" type="password" value="Changed12345" minlength="6" maxlength="32" required></label>
+                            <button class="button wide secondary" type="submit">Change password</button>
+                        </form>
+                    </article>
+
+                    <article class="card action-card">
+                        <div class="step-head small">
+                            <span class="step-number">07</span>
                             <div><h2>Завершить сессию</h2><p>Отзывает refresh-сессию.</p></div>
                         </div>
                         <button class="button wide danger" id="logout" type="button">Logout</button>

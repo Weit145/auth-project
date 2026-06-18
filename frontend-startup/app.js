@@ -4,9 +4,13 @@ const STORAGE_KEY = "kload-testing-session";
 const endpoints = [
     { method: "GET", path: "/_health", label: "Health check", body: "" },
     { method: "POST", path: "/auth/register", label: "Register", body: '{\n  "name": "Test User",\n  "email": "",\n  "password": "Test12345"\n}' },
+    { method: "POST", path: "/auth/repeat-email", label: "Repeat email", body: '{\n  "email": ""\n}' },
     { method: "POST", path: "/auth/confirm-email", label: "Confirm email", body: '{\n  "token": "",\n  "userId": ""\n}' },
     { method: "POST", path: "/auth/login", label: "Login", body: '{\n  "email": "",\n  "password": "Test12345"\n}' },
     { method: "POST", path: "/auth/refresh-token", label: "Refresh token", body: "" },
+    { method: "POST", path: "/auth/change-password", label: "Change password", body: '{\n  "old_password": "Test12345",\n  "new_password": "Changed12345"\n}', auth: true },
+    { method: "POST", path: "/auth/password-reset/request", label: "Password reset request", body: '{\n  "email": ""\n}' },
+    { method: "POST", path: "/auth/password-reset/confirm", label: "Password reset confirm", body: '{\n  "token": "",\n  "userId": "",\n  "password": "Changed12345"\n}' },
     { method: "POST", path: "/auth/logout", label: "Logout", body: "", auth: true },
 ];
 
@@ -40,8 +44,13 @@ function generateTestUser() {
     const suffix = Date.now().toString().slice(-8);
     $("#register-email").value = `test${suffix}@mail.ru`;
     $("#login-email").value = $("#register-email").value;
+    $("#repeat-email").value = $("#register-email").value;
+    $("#password-request-email").value = $("#register-email").value;
     $("#register-password").value = "Test12345";
     $("#login-password").value = "Test12345";
+    $("#old-password").value = "Test12345";
+    $("#new-password").value = "Changed12345";
+    $("#password-confirm-password").value = "Changed12345";
 }
 
 function setBusy(button, busy) {
@@ -263,9 +272,31 @@ function parseConfirmationURL(value, notify = true) {
         $("#confirmation-url").value = url.href;
         $("#confirm-token").value = token;
         $("#confirm-user-id").value = userId;
+        $("#password-reset-url").value = url.href;
+        $("#password-confirm-token").value = token;
+        $("#password-confirm-user-id").value = userId;
         switchTab("flow");
         $("#confirm-card").scrollIntoView({ behavior: "smooth", block: "center" });
         if (notify) showToast("Данные подтверждения заполнены");
+        return true;
+    } catch (error) {
+        if (notify) showToast(error.message, "error");
+        return false;
+    }
+}
+
+function parsePasswordResetURL(value, notify = true) {
+    try {
+        const url = new URL(value, window.location.origin);
+        const token = url.searchParams.get("token");
+        const userId = url.searchParams.get("userId");
+        if (!token || !userId) throw new Error("В ссылке нужны token и userId");
+        $("#password-reset-url").value = url.href;
+        $("#password-confirm-token").value = token;
+        $("#password-confirm-user-id").value = userId;
+        switchTab("flow");
+        $("#password-reset-card").scrollIntoView({ behavior: "smooth", block: "center" });
+        if (notify) showToast("Данные reset-ссылки заполнены");
         return true;
     } catch (error) {
         if (notify) showToast(error.message, "error");
@@ -324,6 +355,7 @@ function bindEvents() {
     $("#generate-user").addEventListener("click", generateTestUser);
     $("#health-refresh").addEventListener("click", checkHealth);
     $("#parse-confirmation").addEventListener("click", () => parseConfirmationURL($("#confirmation-url").value));
+    $("#parse-password-reset").addEventListener("click", () => parsePasswordResetURL($("#password-reset-url").value));
     $("#clear-history").addEventListener("click", () => { state.requests = []; renderHistory(); });
     $("#clear-session").addEventListener("click", () => { clearSession(); showToast("Локальная сессия очищена"); });
     $("#copy-token").addEventListener("click", async () => {
@@ -357,8 +389,15 @@ function bindEvents() {
     bindForm("#register-form", async (data) => {
         await apiRequest({ method: "POST", path: "/auth/register", body: Object.fromEntries(data) });
         $("#login-email").value = data.get("email");
+        $("#repeat-email").value = data.get("email");
+        $("#password-request-email").value = data.get("email");
         $("#login-password").value = data.get("password");
+        $("#old-password").value = data.get("password");
         showToast("Аккаунт создан. Проверьте письмо для подтверждения.");
+    });
+    bindForm("#repeat-email-form", async (data) => {
+        await apiRequest({ method: "POST", path: "/auth/repeat-email", body: Object.fromEntries(data) });
+        showToast("Повторное письмо отправлено");
     });
     bindForm("#confirm-form", async (data) => {
         await apiRequest({ method: "POST", path: "/auth/confirm-email", body: Object.fromEntries(data) });
@@ -366,7 +405,25 @@ function bindEvents() {
     });
     bindForm("#login-form", async (data) => {
         await apiRequest({ method: "POST", path: "/auth/login", body: Object.fromEntries(data) });
+        $("#old-password").value = data.get("password");
         showToast("Вход выполнен");
+    });
+    bindForm("#password-request-form", async (data) => {
+        await apiRequest({ method: "POST", path: "/auth/password-reset/request", body: Object.fromEntries(data) });
+        showToast("Письмо для восстановления отправлено");
+    });
+    bindForm("#password-confirm-form", async (data) => {
+        await apiRequest({ method: "POST", path: "/auth/password-reset/confirm", body: Object.fromEntries(data) });
+        $("#login-password").value = data.get("password");
+        $("#old-password").value = data.get("password");
+        showToast("Пароль изменён через reset");
+    });
+    bindForm("#change-password-form", async (data) => {
+        await apiRequest({ method: "POST", path: "/auth/change-password", body: Object.fromEntries(data), auth: true });
+        $("#login-password").value = data.get("new_password");
+        $("#old-password").value = data.get("new_password");
+        clearSession();
+        showToast("Пароль изменён, локальная сессия очищена");
     });
     bindForm("#console-form", async () => {
         const method = $("#console-method").value;
