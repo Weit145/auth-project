@@ -1,11 +1,13 @@
 const API_BASE = "/api";
 const STORAGE_KEY = "kload-testing-session";
+const REGISTRATION_STORAGE_KEY = "kload-registration-session";
 
 const endpoints = [
     { method: "GET", path: "/_health", label: "Health check", body: "" },
-    { method: "POST", path: "/auth/register", label: "Register", body: '{\n  "name": "Test User",\n  "email": "",\n  "password": "Test12345"\n}' },
-    { method: "POST", path: "/auth/repeat-email", label: "Repeat email", body: '{\n  "email": ""\n}' },
-    { method: "POST", path: "/auth/confirm-email", label: "Confirm email", body: '{\n  "token": "",\n  "userId": ""\n}' },
+    { method: "POST", path: "/register/request", label: "Запросить письмо", body: '{\n  "email": ""\n}' },
+    { method: "POST", path: "/register/repeat-email", label: "Повторить письмо", body: '{\n  "email": ""\n}' },
+    { method: "POST", path: "/register/confirm", label: "Подтвердить email", body: '{\n  "token": "",\n  "userId": ""\n}' },
+    { method: "POST", path: "/register/complete", label: "Установить пароль", body: '{\n  "password": "Test12345"\n}', auth: "registration" },
     { method: "POST", path: "/auth/login", label: "Login", body: '{\n  "email": "",\n  "password": "Test12345"\n}' },
     { method: "POST", path: "/auth/refresh-token", label: "Refresh token", body: "" },
     { method: "POST", path: "/auth/change-password", label: "Change password", body: '{\n  "old_password": "Test12345",\n  "new_password": "Changed12345"\n}', auth: true },
@@ -17,6 +19,7 @@ const endpoints = [
 const state = {
     accessToken: "",
     user: null,
+    registrationToken: "",
     requests: [],
 };
 
@@ -31,6 +34,7 @@ function loadSession() {
     } catch {
         localStorage.removeItem(STORAGE_KEY);
     }
+    state.registrationToken = sessionStorage.getItem(REGISTRATION_STORAGE_KEY) || "";
 }
 
 function saveSession() {
@@ -46,7 +50,7 @@ function generateTestUser() {
     $("#login-email").value = $("#register-email").value;
     $("#repeat-email").value = $("#register-email").value;
     $("#password-request-email").value = $("#register-email").value;
-    $("#register-password").value = "Test12345";
+    $("#complete-password").value = "Test12345";
     $("#login-password").value = "Test12345";
     $("#old-password").value = "Test12345";
     $("#new-password").value = "Changed12345";
@@ -91,6 +95,47 @@ function setSession(data) {
     renderSession();
 }
 
+function clearRegistration() {
+    state.registrationToken = "";
+    sessionStorage.removeItem(REGISTRATION_STORAGE_KEY);
+    renderRegistration();
+}
+
+function renderRegistration() {
+    const payload = decodeJWT(state.registrationToken);
+    const expiresAt = payload?.exp * 1000;
+    const active = Boolean(state.registrationToken) && Number.isFinite(expiresAt) && expiresAt > Date.now();
+    $("#registration-status").textContent = active
+        ? `Email подтверждён. Установите пароль до ${new Date(expiresAt).toLocaleTimeString("ru-RU")}.`
+        : state.registrationToken
+            ? "Срок регистрации истёк. Запросите новое письмо и подтвердите email ещё раз."
+            : "Сначала подтвердите email на шаге 2.";
+    $("#registration-status").classList.toggle("ready", active);
+    $("#registration-token").value = state.registrationToken;
+    $("#registration-details").classList.toggle("hidden", !state.registrationToken);
+    const button = $("#complete-submit");
+    if (!button.dataset.busy) button.disabled = !active;
+    return active;
+}
+
+function applyResponse(path, data) {
+    if (path === "/register/confirm") {
+        if (!data?.access_token || !decodeJWT(data.access_token)?.exp) {
+            throw new Error("Сервер не вернул временный JWT регистрации");
+        }
+        state.registrationToken = data.access_token;
+        sessionStorage.setItem(REGISTRATION_STORAGE_KEY, state.registrationToken);
+        renderRegistration();
+    } else if (["/register/complete", "/auth/login", "/auth/refresh-token"].includes(path)) {
+        setSession(data);
+        if (path === "/register/complete") clearRegistration();
+    } else if (["/register/request", "/register/repeat-email"].includes(path)) {
+        clearRegistration();
+    } else if (["/auth/logout", "/auth/change-password"].includes(path)) {
+        clearSession();
+    }
+}
+
 function clearSession() {
     state.accessToken = "";
     state.user = null;
@@ -109,12 +154,12 @@ function renderSession() {
 
     const user = state.user || {};
     const payload = decodeJWT(state.accessToken);
-    const name = user.name || payload?.name || "Authorized user";
-    $("#user-name").textContent = name;
+    const label = user.email || "Авторизованный пользователь";
+    $("#user-label").textContent = label;
     $("#user-email").textContent = user.email || payload?.email || "—";
     $("#user-role").textContent = user.role || payload?.role || "user";
     $("#user-id").textContent = user.id || payload?.sub || "—";
-    $("#user-avatar").textContent = name.split(/\s+/).map((part) => part[0]).join("").slice(0, 2).toUpperCase();
+    $("#user-avatar").textContent = (user.email || "U").slice(0, 2).toUpperCase();
     $("#access-token").value = state.accessToken;
     $("#jwt-payload").textContent = payload ? JSON.stringify(payload, null, 2) : "Не удалось декодировать payload.";
     $("#token-expiry").textContent = payload?.exp
@@ -123,10 +168,20 @@ function renderSession() {
 }
 
 async function apiRequest({ method = "GET", path, body, auth = false }) {
+    // Select token by endpoint, including requests made in the API console.
+    if (path === "/register/complete") auth = "registration";
+    if (auth === "registration" && path !== "/register/complete") {
+        throw new Error("Временный JWT предназначен только для /register/complete");
+    }
+    if (auth === "registration" && !renderRegistration()) {
+        throw new Error("Подтвердите email заново: временный JWT отсутствует или истёк");
+    }
+    const bearerToken = auth === "registration" ? state.registrationToken : state.accessToken;
+    if (auth && auth !== "none" && !bearerToken) throw new Error("Сначала выполните вход");
     const startedAt = performance.now();
     const headers = { Accept: "application/json" };
     if (body !== undefined && body !== null && body !== "") headers["Content-Type"] = "application/json";
-    if (auth && state.accessToken) headers.Authorization = `Bearer ${state.accessToken}`;
+    if (auth && auth !== "none") headers.Authorization = `Bearer ${bearerToken}`;
 
     const requestBody = typeof body === "string" ? body : body ? JSON.stringify(body) : undefined;
     let status = 0;
@@ -149,10 +204,11 @@ async function apiRequest({ method = "GET", path, body, auth = false }) {
 
         addRequestLog({ method, path, status, requestBody, responseBody, duration: performance.now() - startedAt });
         if (!response.ok) {
+            if (path === "/register/complete" && [401, 403, 409].includes(status)) clearRegistration();
             const message = responseBody?.error || responseBody?.status || `HTTP ${status}`;
             throw new Error(message);
         }
-        setSession(responseBody);
+        applyResponse(path, responseBody);
         return responseBody;
     } catch (error) {
         if (!status) {
@@ -329,7 +385,7 @@ function renderEndpoints() {
             $("#console-method").value = endpoint.method;
             $("#console-path").value = endpoint.path;
             $("#console-body").value = endpoint.body;
-            $("#console-auth").checked = Boolean(endpoint.auth);
+            $("#console-auth").value = endpoint.auth === "registration" ? "registration" : endpoint.auth ? "access" : "none";
         });
         list.append(button);
     });
@@ -340,12 +396,15 @@ function bindForm(formSelector, handler) {
         event.preventDefault();
         const button = event.submitter;
         setBusy(button, true);
+        if (button) button.dataset.busy = "true";
         try {
             await handler(new FormData(event.currentTarget));
         } catch (error) {
             showToast(error.message, "error");
         } finally {
             setBusy(button, false);
+            if (button) delete button.dataset.busy;
+            renderRegistration();
         }
     });
 }
@@ -358,6 +417,7 @@ function bindEvents() {
     $("#parse-password-reset").addEventListener("click", () => parsePasswordResetURL($("#password-reset-url").value));
     $("#clear-history").addEventListener("click", () => { state.requests = []; renderHistory(); });
     $("#clear-session").addEventListener("click", () => { clearSession(); showToast("Локальная сессия очищена"); });
+    $("#clear-registration").addEventListener("click", clearRegistration);
     $("#copy-token").addEventListener("click", async () => {
         await navigator.clipboard.writeText(state.accessToken);
         showToast("Access token скопирован");
@@ -387,21 +447,28 @@ function bindEvents() {
     });
 
     bindForm("#register-form", async (data) => {
-        await apiRequest({ method: "POST", path: "/auth/register", body: Object.fromEntries(data) });
+        await apiRequest({ method: "POST", path: "/register/request", body: { email: data.get("email") } });
         $("#login-email").value = data.get("email");
         $("#repeat-email").value = data.get("email");
         $("#password-request-email").value = data.get("email");
-        $("#login-password").value = data.get("password");
-        $("#old-password").value = data.get("password");
-        showToast("Аккаунт создан. Проверьте письмо для подтверждения.");
+        showToast("Письмо отправлено. Подтвердите email, затем установите пароль.");
     });
     bindForm("#repeat-email-form", async (data) => {
-        await apiRequest({ method: "POST", path: "/auth/repeat-email", body: Object.fromEntries(data) });
+        await apiRequest({ method: "POST", path: "/register/repeat-email", body: Object.fromEntries(data) });
         showToast("Повторное письмо отправлено");
     });
     bindForm("#confirm-form", async (data) => {
-        await apiRequest({ method: "POST", path: "/auth/confirm-email", body: Object.fromEntries(data) });
-        showToast("Email подтверждён, сессия создана");
+        await apiRequest({ method: "POST", path: "/register/confirm", body: Object.fromEntries(data) });
+        $("#complete-card").scrollIntoView({ behavior: "smooth", block: "center" });
+        $("#complete-password").focus({ preventScroll: true });
+        showToast("Email подтверждён. Теперь установите пароль.");
+    });
+    bindForm("#complete-form", async (data) => {
+        await apiRequest({ method: "POST", path: "/register/complete", body: { password: data.get("password") }, auth: "registration" });
+        $("#login-password").value = data.get("password");
+        $("#old-password").value = data.get("password");
+        if (state.user?.email) $("#login-email").value = state.user.email;
+        showToast("Регистрация завершена. Вы вошли в аккаунт.");
     });
     bindForm("#login-form", async (data) => {
         await apiRequest({ method: "POST", path: "/auth/login", body: Object.fromEntries(data) });
@@ -433,7 +500,7 @@ function bindEvents() {
             method,
             path: $("#console-path").value.trim(),
             body: rawBody || undefined,
-            auth: $("#console-auth").checked,
+            auth: $("#console-auth").value,
         });
         showToast(`Получен ответ: ${response?.status || "success"}`);
         switchTab("requests");
@@ -444,6 +511,7 @@ function init() {
     loadSession();
     generateTestUser();
     renderSession();
+    renderRegistration();
     renderEndpoints();
     renderHistory();
     bindEvents();
@@ -453,6 +521,7 @@ function init() {
 
     checkHealth();
     setInterval(checkHealth, 30000);
+    setInterval(renderRegistration, 1000);
 }
 
 init();

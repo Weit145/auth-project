@@ -1,0 +1,210 @@
+services:
+  frontend:
+    build:
+      context: ./frontend-startup
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    ports:
+      - "3000:80"
+    depends_on:
+      gateway:
+        condition: service_started
+
+  gateway:
+    build:
+      context: ./gateway-startup
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    user: "${APP_UID:-1000}:${APP_GID:-1000}"
+    environment:
+      LOG_LEVEL: DEBUG
+      HTTP_ADDRESS: 0.0.0.0:8080
+      AUTH_GRPC_ADDR: auth:50051
+      AUTH_GRPC_TLS_CERT_PATH: /run/secrets/client.crt
+      AUTH_GRPC_TLS_KEY_PATH: /run/secrets/client.key
+      AUTH_GRPC_TLS_CA_PATH: /run/secrets/ca.crt
+      AUTH_GRPC_TLS_SERVER_NAME: auth
+      JWT_PUBLIC_KEY_PATH: /run/secrets/jwt_public.pem
+      REDIS_ADDR: redis:6379
+    ports:
+      - "8080:8080"
+    volumes:
+      - ./secrets/jwt_public.pem:/run/secrets/jwt_public.pem:ro
+      - ./secrets/client.crt:/run/secrets/client.crt:ro
+      - ./secrets/client.key:/run/secrets/client.key:ro
+      - ./secrets/ca.crt:/run/secrets/ca.crt:ro
+    depends_on:
+      auth:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  auth:
+    build:
+      context: ./auth-startup
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    user: "${APP_UID:-1000}:${APP_GID:-1000}"
+    environment:
+      LOG_LEVEL: DEBUG
+      GRPC_AUTH_ADDR: 0.0.0.0:50051
+      GRPC_TLS_CERT_PATH: /run/secrets/server.crt
+      GRPC_TLS_KEY_PATH: /run/secrets/server.key
+      GRPC_TLS_CLIENT_CA_PATH: /run/secrets/ca.crt
+      DATABASE_URL: postgres://postgres:postgres@db:5432/postgres?sslmode=disable
+      JWT_PRIVATE_KEY_PATH: /run/secrets/jwt_private.pem
+      JWT_REFRESH_SECRET: ${JWT_REFRESH_SECRET:?JWT_REFRESH_SECRET must be set in .env}
+      KAFKA_BROKERS: kafka:9092
+      KAFKA_NOTIFICATIONS_TOPIC: notifications
+      EMAIL_VERIFICATION_URL: http://localhost:3000/
+    # ports:
+    #   - "50051:50051"
+    volumes:
+      - ./secrets/jwt_private.pem:/run/secrets/jwt_private.pem:ro
+      - ./secrets/server.crt:/run/secrets/server.crt:ro
+      - ./secrets/server.key:/run/secrets/server.key:ro
+      - ./secrets/ca.crt:/run/secrets/ca.crt:ro
+    depends_on:
+      db:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "pidof auth-startup >/dev/null"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+      start_period: 5s
+
+  notification:
+    build:
+      context: ./notification-startup
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    env_file:
+      - ./notification-startup/.env
+    environment:
+      LOG_LEVEL: INFO
+      CELERY_BROKER: amqp://guest:guest@rabbitmq:5672//
+      SMTP_HOST: smtp.gmail.com
+      SMTP_PORT: 465
+      SMTP_USE_TLS: true
+      SMTP_TIMEOUT: 30
+      KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+      KAFKA_AUTO_OFFSET_RESET: earliest
+      KAFKA_REGISTRATION_TOPIC: notifications
+      KAFKA_REGISTRATION_DLQ_TOPIC: notifications.dlq
+      KAFKA_CONSUMER_GROUP_ID: notification.email_verification
+    depends_on:
+      kafka:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+
+  notification-worker:
+    build:
+      context: ./notification-startup
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    command: ["celery", "--quiet", "-A", "app.infrastructure.tasks.celery:app", "worker", "--loglevel=WARNING"]
+    env_file:
+      - ./notification-startup/.env
+    environment:
+      LOG_LEVEL: INFO
+      CELERY_BROKER: amqp://guest:guest@rabbitmq:5672//
+      SMTP_HOST: smtp.gmail.com
+      SMTP_PORT: 465
+      SMTP_USE_TLS: true
+      SMTP_TIMEOUT: 30
+      KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+      KAFKA_AUTO_OFFSET_RESET: earliest
+      KAFKA_REGISTRATION_TOPIC: notifications
+      KAFKA_REGISTRATION_DLQ_TOPIC: notifications.dlq
+      KAFKA_CONSUMER_GROUP_ID: notification.email_verification
+      EMAIL_IDEMPOTENCY_DB_PATH: /tmp/notification-email-idempotency.sqlite3
+    volumes:
+      - notification_idempotency:/tmp
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+
+  kafka:
+    image: apache/kafka:3.7.2
+    hostname: kafka
+    restart: unless-stopped
+    environment:
+      KAFKA_NODE_ID: 1
+      KAFKA_PROCESS_ROLES: broker,controller
+      KAFKA_CONTROLLER_QUORUM_VOTERS: 1@kafka:9093
+      KAFKA_LISTENERS: CONTROLLER://:9093,PLAINTEXT://:9092,PLAINTEXT_HOST://:9094
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092,PLAINTEXT_HOST://localhost:9094
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT
+      KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
+      KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
+      CLUSTER_ID: 4L6g3nShT-eMCtK--X86sw
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: 0
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
+      KAFKA_LOG_DIRS: /var/lib/kafka/data
+    ports:
+      - "9094:9094"
+    volumes:
+      - kafka_data:/var/lib/kafka/data
+    healthcheck:
+      test: ["CMD-SHELL", "/opt/kafka/bin/kafka-topics.sh --bootstrap-server localhost:9092 --list >/dev/null 2>&1"]
+      interval: 10s
+      timeout: 10s
+      retries: 10
+      start_period: 20s
+
+  rabbitmq:
+    image: rabbitmq:3.13-alpine
+    restart: unless-stopped
+    volumes:
+      - rabbitmq_data:/var/lib/rabbitmq
+    healthcheck:
+      test: ["CMD-SHELL", "rabbitmq-diagnostics -q ping"]
+      interval: 10s
+      timeout: 10s
+      retries: 10
+      start_period: 10s
+
+  redis:
+    image: redis:8-alpine
+    restart: unless-stopped
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+      start_period: 5s
+
+  db:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: postgres
+    volumes:
+      - db_data:/var/lib/postgresql/data
+      - ./auth-startup/migrations/00001_init.up.sql:/docker-entrypoint-initdb.d/00001_init.sql:ro
+      - ./auth-startup/migrations/00002_password_reset_tokens.up.sql:/docker-entrypoint-initdb.d/00002_password_reset_tokens.sql:ro
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+      start_period: 5s
+
+volumes:
+  db_data:
+  kafka_data:
+  rabbitmq_data:
+  redis_data:
+  notification_idempotency:

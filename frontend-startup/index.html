@@ -50,7 +50,7 @@
         </section>
 
         <nav class="tabs" aria-label="Разделы">
-            <button class="tab active" type="button" data-tab="flow">Auth flow <span>9 ручек</span></button>
+            <button class="tab active" type="button" data-tab="flow">Auth flow <span>10 ручек</span></button>
             <button class="tab" type="button" data-tab="console">API console <span>ручной запрос</span></button>
             <button class="tab" type="button" data-tab="requests">История <span id="request-count">0</span></button>
         </nav>
@@ -61,26 +61,22 @@
                     <article class="card step-card">
                         <div class="step-head">
                             <span class="step-number">01</span>
-                            <div><h2>Создать аккаунт</h2><p>Отправляет событие подтверждения в Kafka.</p></div>
+                            <div><h2>Запросить письмо</h2><p>Введите email. Пароль задаётся после подтверждения адреса.</p></div>
                             <span class="method post">POST</span>
                         </div>
                         <form id="register-form">
-                            <div class="form-grid">
-                                <label><span>Имя</span><input name="name" value="Test User" minlength="4" maxlength="32" required></label>
-                                <label><span>Email</span><input name="email" id="register-email" type="email" maxlength="32" required></label>
-                            </div>
-                            <label><span>Пароль</span><input name="password" id="register-password" type="password" value="Test12345" minlength="6" maxlength="32" required></label>
+                            <label><span>Email</span><input name="email" id="register-email" type="email" maxlength="32" autocomplete="email" required></label>
                             <div class="form-actions">
-                                <button class="button primary" type="submit">Зарегистрировать</button>
+                                <button class="button primary" type="submit">Получить письмо</button>
                                 <button class="button ghost" id="generate-user" type="button">Новые тестовые данные</button>
-                                <code>/auth/register</code>
+                                <code>/register/request</code>
                             </div>
                         </form>
                         <form id="repeat-email-form" class="inline-form">
                             <label><span>Email для повторного письма</span><input name="email" id="repeat-email" type="email" maxlength="32" required></label>
                             <div class="form-actions">
                                 <button class="button secondary" type="submit">Повторить письмо</button>
-                                <code>/auth/repeat-email</code>
+                                <code>/register/repeat-email</code>
                             </div>
                         </form>
                     </article>
@@ -88,7 +84,7 @@
                     <article class="card step-card" id="confirm-card">
                         <div class="step-head">
                             <span class="step-number">02</span>
-                            <div><h2>Подтвердить email</h2><p>Вставьте ссылку из письма или заполните поля.</p></div>
+                            <div><h2>Подтвердить email</h2><p>Вставьте ссылку из письма. Подтверждение откроет шаг установки пароля.</p></div>
                             <span class="method post">POST</span>
                         </div>
                         <label><span>Ссылка из письма</span><input id="confirmation-url" placeholder="http://localhost:3000/?token=...&userId=..."></label>
@@ -100,14 +96,35 @@
                             </div>
                             <div class="form-actions">
                                 <button class="button primary" type="submit">Подтвердить email</button>
-                                <code>/auth/confirm-email</code>
+                                <code>/register/confirm</code>
+                            </div>
+                        </form>
+                    </article>
+
+                    <article class="card step-card" id="complete-card">
+                        <div class="step-head">
+                            <span class="step-number">03</span>
+                            <div><h2>Установить пароль</h2><p>Завершает регистрацию и создаёт сессию входа.</p></div>
+                            <span class="method post">POST</span>
+                        </div>
+                        <p class="registration-status" id="registration-status" role="status">Сначала подтвердите email на шаге 2.</p>
+                        <details class="hidden registration-details" id="registration-details">
+                            <summary>Временный JWT регистрации</summary>
+                            <label><span>Используется только для завершения регистрации</span><textarea id="registration-token" rows="4" readonly></textarea></label>
+                            <button class="button ghost compact" id="clear-registration" type="button">Очистить временный JWT</button>
+                        </details>
+                        <form id="complete-form">
+                            <label><span>Пароль</span><input name="password" id="complete-password" type="password" value="Test12345" minlength="6" maxlength="32" autocomplete="new-password" required></label>
+                            <div class="form-actions">
+                                <button class="button primary" id="complete-submit" type="submit" disabled>Завершить регистрацию</button>
+                                <code>/register/complete</code>
                             </div>
                         </form>
                     </article>
 
                     <article class="card step-card">
                         <div class="step-head">
-                            <span class="step-number">03</span>
+                            <span class="step-number">04</span>
                             <div><h2>Войти</h2><p>Получает access token и HttpOnly refresh cookie.</p></div>
                             <span class="method post">POST</span>
                         </div>
@@ -125,7 +142,7 @@
 
                     <article class="card step-card" id="password-reset-card">
                         <div class="step-head">
-                            <span class="step-number">04</span>
+                            <span class="step-number">05</span>
                             <div><h2>Восстановить пароль</h2><p>Запрашивает reset token и подтверждает новый пароль.</p></div>
                             <span class="method post">POST</span>
                         </div>
@@ -162,12 +179,12 @@
                         <div class="empty-session" id="empty-session">
                             <div class="empty-icon">↗</div>
                             <strong>Сессия не создана</strong>
-                            <p>Подтвердите email или выполните вход.</p>
+                            <p>Завершите регистрацию или выполните вход.</p>
                         </div>
                         <div class="session-data hidden" id="session-data">
                             <div class="user-row">
-                                <span class="avatar" id="user-avatar">TU</span>
-                                <div><strong id="user-name">Test User</strong><span id="user-email">test@example.com</span></div>
+                                <span class="avatar" id="user-avatar">U</span>
+                                <div><strong id="user-label">Пользователь</strong><span id="user-email">—</span></div>
                                 <b id="user-role">user</b>
                             </div>
                             <dl class="session-meta">
@@ -184,7 +201,7 @@
 
                     <article class="card action-card">
                         <div class="step-head small">
-                            <span class="step-number">05</span>
+                            <span class="step-number">06</span>
                             <div><h2>Обновить token</h2><p>Использует HttpOnly cookie.</p></div>
                         </div>
                         <button class="button wide secondary" id="refresh-token" type="button">Refresh access token</button>
@@ -192,7 +209,7 @@
 
                     <article class="card action-card">
                         <div class="step-head small">
-                            <span class="step-number">06</span>
+                            <span class="step-number">07</span>
                             <div><h2>Сменить пароль</h2><p>Требует Bearer access token.</p></div>
                         </div>
                         <form id="change-password-form">
@@ -204,7 +221,7 @@
 
                     <article class="card action-card">
                         <div class="step-head small">
-                            <span class="step-number">07</span>
+                            <span class="step-number">08</span>
                             <div><h2>Завершить сессию</h2><p>Отзывает refresh-сессию.</p></div>
                         </div>
                         <button class="button wide danger" id="logout" type="button">Logout</button>
@@ -232,7 +249,11 @@
                             <input id="console-path" value="/auth/login" aria-label="Endpoint path">
                             <button class="button primary" type="submit">Отправить</button>
                         </div>
-                        <label class="checkbox"><input id="console-auth" type="checkbox"><span>Добавить Bearer access token</span></label>
+                        <label><span>Авторизация Bearer</span><select id="console-auth">
+                            <option value="none">Без токена</option>
+                            <option value="access">Access token активной сессии</option>
+                            <option value="registration">Временный JWT регистрации</option>
+                        </select></label>
                         <label><span>JSON body</span><textarea class="code-area" id="console-body" rows="14">{
   "email": "",
   "password": "Test12345"

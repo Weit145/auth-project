@@ -57,6 +57,7 @@ services:
       KAFKA_BROKERS: kafka:9092
       KAFKA_NOTIFICATIONS_TOPIC: notifications
       EMAIL_VERIFICATION_URL: http://localhost:3000/
+      WORKER_NUM: 4
     # ports:
     #   - "50051:50051"
     volumes:
@@ -193,6 +194,8 @@ services:
       - db_data:/var/lib/postgresql/data
       - ./auth-startup/migrations/00001_init.up.sql:/docker-entrypoint-initdb.d/00001_init.sql:ro
       - ./auth-startup/migrations/00002_password_reset_tokens.up.sql:/docker-entrypoint-initdb.d/00002_password_reset_tokens.sql:ro
+      - ./auth-startup/migrations/00003_registration_sessions.up.sql:/docker-entrypoint-initdb.d/00003_registration_sessions.sql:ro
+      - ./auth-startup/migrations/00004_outbox_create.up.sql:/docker-entrypoint-initdb.d/00004_outbox_create.sql:ro
     ports:
       - "5432:5432"
     healthcheck:
