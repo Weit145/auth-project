@@ -1,0 +1,34 @@
+@startuml
+!pragma layout smetana
+title KLoad — C4 Level 2: контейнеры
+left to right direction
+skinparam shadowing false
+
+actor "Пользователь" as user
+package "KLoad startup <<Software System>>" {
+  rectangle "Frontend\n<<Container: HTML/JS, nginx>>\nФормы и API-консоль" as frontend #C7E7FF
+  rectangle "Gateway\n<<Container: Go, HTTP>>\nМаршруты, JWT, ограничения запросов" as gateway #C7E7FF
+  rectangle "Auth\n<<Container: Go, gRPC>>\nПользователи, токены, сессии, outbox" as auth #C7E7FF
+  rectangle "Notification consumer\n<<Container: Python>>\nЧитает события, ставит задачи" as consumer #C7E7FF
+  rectangle "Notification worker\n<<Container: Celery>>\nОтправляет письма" as worker #C7E7FF
+  database "PostgreSQL\n<<Container: database>>" as postgres #D5F5D5
+  database "Redis\n<<Container: key-value store>>\nRate limiting" as redis #D5F5D5
+  queue "Kafka\n<<Container: broker>>\nnotifications" as kafka #FBE5C4
+  queue "RabbitMQ\n<<Container: broker>>\nЗадачи Celery" as rabbit #FBE5C4
+  database "SQLite\n<<Container: database>>\nИдемпотентность отправки" as sqlite #D5F5D5
+}
+rectangle "SMTP-провайдер\n<<External System>>" as smtp #EEEEEE
+
+user --> frontend : Использует браузер
+frontend --> gateway : HTTP/JSON
+gateway --> auth : gRPC с mTLS
+gateway --> redis : Счётчики rate limit
+auth --> postgres : SQL; транзакции и outbox
+auth --> kafka : Публикует события из outbox
+kafka --> consumer : Читает notifications
+consumer --> rabbit : Ставит задачи Celery
+rabbit --> worker : Передаёт задачи
+worker --> sqlite : Проверяет идемпотентность
+worker --> smtp : Отправляет письма по SMTP
+smtp --> user : Доставляет ссылки
+@enduml

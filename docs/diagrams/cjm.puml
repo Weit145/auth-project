@@ -1,0 +1,35 @@
+@startuml
+!pragma layout smetana
+title KLoad — CJM: регистрация и начало работы
+left to right direction
+skinparam shadowing false
+
+rectangle "1. Знакомство\nКанал: frontend\nДействие: открыть форму\nОжидание: понятный старт" as intro #E8F3FF
+rectangle "2. Запрос письма\nPOST /register/request\nВвод: email\nОжидание: письмо пришло" as request #E8F3FF
+rectangle "3. Подтверждение\nПисьмо → frontend\nPOST /register/confirm\nВвод: token + userId" as confirm #FFF2D7
+rectangle "4. Завершение\nPOST /register/complete\nВвод: пароль + временный JWT\nРезультат: access + refresh" as complete #E3F5E8
+rectangle "5. Возврат\nPOST /auth/login\nЗатем refresh / logout\nРезультат: управляемая сессия" as returning #E3F5E8
+
+intro --> request
+request --> confirm
+confirm --> complete
+complete --> returning
+
+note bottom of request
+  Точка затруднения: письмо может задержаться.
+  Действие: /register/repeat-email с лимитом запросов.
+end note
+note bottom of confirm
+  Точка затруднения: ссылка или токен устарели.
+  Действие: повторный запрос письма.
+end note
+note bottom of returning
+  Забытый пароль: /auth/password-reset/request
+  и /auth/password-reset/confirm.
+end note
+
+legend bottom
+  CJM отражает реализованный путь пользователя; цвета отмечают этапы
+  входа, возможного затруднения и успешного доступа.
+endlegend
+@enduml

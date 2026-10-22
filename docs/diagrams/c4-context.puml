@@ -1,0 +1,22 @@
+@startuml
+!pragma layout smetana
+title KLoad — C4 Level 1: системный контекст
+left to right direction
+skinparam shadowing false
+skinparam rectangle {
+  RoundCorner 12
+}
+
+actor "Пользователь" as user
+rectangle "KLoad startup\n<<Software System>>\nРегистрация, вход и управление сессиями" as system #C7E7FF
+rectangle "Почтовый провайдер\n<<External System>>\nДоставка писем" as smtp #EEEEEE
+
+user --> system : Открывает веб-интерфейс;\nрегистрируется и управляет доступом
+system --> smtp : Отправляет ссылки подтверждения\nи сброса пароля по SMTP
+smtp --> user : Доставляет письма
+
+legend bottom
+  C4: человек, программная система и внешняя система.
+  Текущее состояние по docker-compose.yml и исходному коду.
+endlegend
+@enduml
